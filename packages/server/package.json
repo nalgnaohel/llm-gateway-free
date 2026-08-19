@@ -1,0 +1,4 @@
+{
+  "name": "@aigw/server", "version": "1.0.0", "type": "module", "main": "src/main.ts",
+  "dependencies": { "@aigw/shared": "*", "better-sqlite3": "^12.6.2", "express": "^5.1.0", "ws": "^8.18.0" }
+}

@@ -1,0 +1,4 @@
+{
+  "name": "@aigw/client", "version": "1.0.0", "type": "module", "main": "src/main.ts",
+  "dependencies": { "@aigw/shared": "*", "ws": "^8.18.0", "playwright-core": "^1.49.1" }
+}
