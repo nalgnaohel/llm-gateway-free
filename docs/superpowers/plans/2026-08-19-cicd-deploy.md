@@ -23,6 +23,41 @@
 
 ---
 
+### Task 0: Regenerate the stale `package-lock.json`
+
+The committed `package-lock.json` is out of sync with `package.json`
+(lockfile pins `vitest@2.1.9`; `package.json` requires `^4.1.11`), so
+`npm ci` fails on a clean checkout. Both the CI `test` job (Task 3) and the
+server-side install (Task 1) run `npm ci`, so the lockfile must be fixed
+first.
+
+**Files:**
+- Modify: `package-lock.json` (regenerated)
+
+- [ ] **Step 1: Regenerate the lockfile**
+
+Run: `npm install`
+Expected: exits 0; `git status` shows `package-lock.json` modified.
+
+- [ ] **Step 2: Verify `npm ci` works from the regenerated lockfile**
+
+Run: `npm ci`
+Expected: exits 0, installs cleanly (this is exactly what CI and the server will run).
+
+- [ ] **Step 3: Verify the test baseline still passes**
+
+Run: `npm test`
+Expected: `Tests 84 passed (84)`.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add package-lock.json
+git commit -m "fix: regenerate package-lock.json to match package.json"
+```
+
+---
+
 ### Task 1: Create `scripts/deploy-server.sh`
 
 **Files:**
