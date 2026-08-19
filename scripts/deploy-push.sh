@@ -27,8 +27,8 @@ if [ "$DRY_RUN" = 1 ]; then
 else
   command -v sshpass >/dev/null 2>&1 || { echo "sshpass not installed" >&2; exit 1; }
   export SSHPASS="$PASS"
-  SSH="sshpass -e ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
-  SCP="sshpass -e scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+  SSH="sshpass -e ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=20"
+  SCP="sshpass -e scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=20"
 fi
 
 tar czf "$TARBALL" \

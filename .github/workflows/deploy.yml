@@ -26,6 +26,23 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install sshpass
         run: sudo apt-get update && sudo apt-get install -y sshpass
+      - name: Check secrets present
+        env:
+          SERVER_ACCOUNT: ${{ secrets.SERVER_ACCOUNT }}
+          SERVER_IP: ${{ secrets.SERVER_IP }}
+          SERVER_PASS: ${{ secrets.SERVER_PASS }}
+        run: |
+          [ -n "$SERVER_ACCOUNT" ] && echo "SERVER_ACCOUNT: set" || { echo "SERVER_ACCOUNT: MISSING"; exit 1; }
+          [ -n "$SERVER_IP" ] && echo "SERVER_IP: set" || { echo "SERVER_IP: MISSING"; exit 1; }
+          [ -n "$SERVER_PASS" ] && echo "SERVER_PASS: set" || { echo "SERVER_PASS: MISSING"; exit 1; }
+      - name: Test SSH connectivity
+        env:
+          SERVER_ACCOUNT: ${{ secrets.SERVER_ACCOUNT }}
+          SERVER_IP: ${{ secrets.SERVER_IP }}
+          SERVER_PASS: ${{ secrets.SERVER_PASS }}
+        run: |
+          export SSHPASS="$SERVER_PASS"
+          sshpass -e ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=15 "$SERVER_ACCOUNT@$SERVER_IP" 'echo SSH-OK; hostname'
       - name: Deploy gateway to server
         env:
           SERVER_ACCOUNT: ${{ secrets.SERVER_ACCOUNT }}
