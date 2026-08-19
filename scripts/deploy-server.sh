@@ -11,8 +11,21 @@ SERVICE_NAME="llm-gateway"
 PORT="${AIGW_PORT:-8787}"
 
 CHECK=0
-if [ "${1:-}" = "--check" ]; then CHECK=1; fi
-[ $# -gt 1 ] && { echo "usage: $0 [--check]" >&2; exit 2; }
+case "$#" in
+  0) ;;
+  1)
+    if [ "$1" = "--check" ]; then
+      CHECK=1
+    else
+      echo "usage: $0 [--check]" >&2
+      exit 2
+    fi
+    ;;
+  *)
+    echo "usage: $0 [--check]" >&2
+    exit 2
+    ;;
+esac
 
 require_node() {
   if command -v node >/dev/null 2>&1; then
@@ -34,12 +47,21 @@ require_node() {
     echo "unsupported distro: install Node 22+ manually" >&2
     exit 1
   fi
+  if command -v node >/dev/null 2>&1; then
+    major=$(node -p "process.versions.node.split('.')[0]" 2>/dev/null || echo 0)
+    if [ "$major" -ge 22 ]; then
+      echo "node $(node -v) ok"
+      return 0
+    fi
+  fi
+  echo "node still missing or <22 after install — fix manually and re-run" >&2
+  exit 1
 }
 
 install_deps() {
   cd "$APP_DIR" || exit 1
   echo "npm ci --omit=dev ..."
-  npm ci --omit=dev
+  npm ci --omit=dev || { echo "npm ci failed — aborting before service restart" >&2; exit 1; }
 }
 
 ensure_env() {
@@ -53,6 +75,26 @@ ensure_env() {
 
 write_unit() {
   NODE_BIN=$(command -v node)
+  if [ "$CHECK" = 1 ]; then
+    echo "--- would install $SERVICE_NAME.service ($NODE_BIN): ---"
+    cat <<EOF
+[Unit]
+Description=LLM Gateway Server
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=$APP_DIR
+EnvironmentFile=-$APP_DIR/.env
+ExecStart=$NODE_BIN packages/server/src/main.ts
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    return 0
+  fi
   {
     echo "[Unit]"
     echo "Description=LLM Gateway Server"
@@ -69,11 +111,6 @@ write_unit() {
     echo "[Install]"
     echo "WantedBy=multi-user.target"
   } > "$SERVICE_NAME.service"
-  if [ "$CHECK" = 1 ]; then
-    echo "--- would install $SERVICE_NAME.service ($NODE_BIN): ---"
-    cat "$SERVICE_NAME.service"
-    return 0
-  fi
   install -m 644 "$SERVICE_NAME.service" "/etc/systemd/system/$SERVICE_NAME.service"
   systemctl daemon-reload
   systemctl enable "$SERVICE_NAME"
