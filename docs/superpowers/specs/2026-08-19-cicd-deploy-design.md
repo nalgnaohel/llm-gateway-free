@@ -32,7 +32,7 @@ Two jobs:
 - **`deploy`** (`needs: test`), triggers: push to `main` + `workflow_dispatch`:
   1. Tar the source (excludes `node_modules`, `.git`, `.run`, `.env`, `docs`,
      `tests`, `node_modules` everywhere).
-  2. `scp` the tarball + `scripts/deploy-server.sh` to the server.
+  2. `scp` the tarball to the server.
   3. On the server: move any existing `/opt/llm-gateway` to
      `/opt/llm-gateway.prev` (rollback), extract the tarball to
      `/opt/llm-gateway`, run the deploy script.

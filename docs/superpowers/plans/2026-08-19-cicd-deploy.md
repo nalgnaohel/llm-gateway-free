@@ -138,8 +138,13 @@ install_deps() {
 
 ensure_env() {
   if [ ! -f "$APP_DIR/.env" ]; then
-    cp "$APP_DIR/.env.example" "$APP_DIR/.env"
-    echo "created $APP_DIR/.env from .env.example — EDIT IT (AIGW_AGENT_TOKEN, AIGW_API_KEY)"
+    if [ -f "$APP_DIR/.env.example" ]; then
+      cp "$APP_DIR/.env.example" "$APP_DIR/.env"
+      echo "created $APP_DIR/.env from .env.example — EDIT IT (AIGW_AGENT_TOKEN, AIGW_API_KEY)"
+    else
+      echo "$APP_DIR/.env.example missing — cannot create .env" >&2
+      exit 1
+    fi
   else
     echo "$APP_DIR/.env exists, leaving as-is"
   fi
@@ -167,23 +172,23 @@ WantedBy=multi-user.target
 EOF
     return 0
   fi
-  {
-    echo "[Unit]"
-    echo "Description=LLM Gateway Server"
-    echo "After=network.target"
-    echo ""
-    echo "[Service]"
-    echo "Type=simple"
-    echo "WorkingDirectory=$APP_DIR"
-    echo "EnvironmentFile=-$APP_DIR/.env"
-    echo "ExecStart=$NODE_BIN packages/server/src/main.ts"
-    echo "Restart=always"
-    echo "RestartSec=5"
-    echo ""
-    echo "[Install]"
-    echo "WantedBy=multi-user.target"
-  } > "$SERVICE_NAME.service"
-  install -m 644 "$SERVICE_NAME.service" "/etc/systemd/system/$SERVICE_NAME.service"
+  cat > "/etc/systemd/system/$SERVICE_NAME.service" <<EOF
+[Unit]
+Description=LLM Gateway Server
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=$APP_DIR
+EnvironmentFile=-$APP_DIR/.env
+ExecStart=$NODE_BIN packages/server/src/main.ts
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+  chmod 644 "/etc/systemd/system/$SERVICE_NAME.service"
   systemctl daemon-reload
   systemctl enable "$SERVICE_NAME"
   systemctl restart "$SERVICE_NAME"
@@ -288,6 +293,8 @@ fi
 tar czf "$TARBALL" \
   --exclude='node_modules' \
   --exclude='.git' \
+  --exclude='.worktrees' \
+  --exclude='.superpowers' \
   --exclude='.run' \
   --exclude='.env' \
   --exclude='docs' \
@@ -304,6 +311,7 @@ run $SSH "$HOST" "
   if [ -d $APP_DIR ]; then rm -rf ${APP_DIR}.prev; mv $APP_DIR ${APP_DIR}.prev; fi
   mkdir -p $APP_DIR
   tar xzf /tmp/llm-gateway-src.tar.gz -C $APP_DIR
+  [ -f ${APP_DIR}.prev/.env ] && cp ${APP_DIR}.prev/.env $APP_DIR/.env || true
   sh $APP_DIR/scripts/deploy-server.sh
 "
 ```

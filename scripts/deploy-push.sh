@@ -34,6 +34,8 @@ fi
 tar czf "$TARBALL" \
   --exclude='node_modules' \
   --exclude='.git' \
+  --exclude='.worktrees' \
+  --exclude='.superpowers' \
   --exclude='.run' \
   --exclude='.env' \
   --exclude='docs' \
@@ -50,5 +52,6 @@ run $SSH "$HOST" "
   if [ -d $APP_DIR ]; then rm -rf ${APP_DIR}.prev; mv $APP_DIR ${APP_DIR}.prev; fi
   mkdir -p $APP_DIR
   tar xzf /tmp/llm-gateway-src.tar.gz -C $APP_DIR
+  [ -f ${APP_DIR}.prev/.env ] && cp ${APP_DIR}.prev/.env $APP_DIR/.env || true
   sh $APP_DIR/scripts/deploy-server.sh
 "
