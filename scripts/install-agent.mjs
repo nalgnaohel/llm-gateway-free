@@ -171,16 +171,37 @@ function nodeBin() {
   return process.execPath;
 }
 
+// The autostart supervisors (systemd --user, launchd, Task Scheduler) start
+// processes with a minimal PATH that usually omits wherever this machine's
+// npm puts global bins (nvm, ~/.npm-global, Homebrew, ...) — the client agent
+// spawns `claude`/`opencode` by bare name, so without this they silently show
+// up as "not found on PATH" even though this same install just verified they
+// work. Capture the PATH this installer is actually running with (already
+// proven to resolve node/npm/the CLIs moments ago) and bake it into every
+// autostart entry instead of guessing a machine-specific path.
+function runtimePath() {
+  return process.env.PATH || "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
+}
+
 function linuxUnits() {
   const node = nodeBin();
+  // StartLimit* caps Restart=always: without it, a process dying repeatedly
+  // (e.g. the OOM killer reaping Chrome on a memory-starved machine) restarts
+  // in a tight loop that only piles on more memory/CPU pressure. Past the
+  // burst, systemd marks the unit failed instead of retrying forever —
+  // `systemctl --user reset-failed && systemctl --user restart <unit>` once
+  // the underlying issue (e.g. free memory) is resolved.
   return {
     "aigw-client-agent.service": `[Unit]
 Description=AI Gateway Client Agent
 After=network-online.target
+StartLimitIntervalSec=180
+StartLimitBurst=5
 
 [Service]
 Type=simple
 WorkingDirectory=${appDir}
+Environment=PATH=${runtimePath()}
 EnvironmentFile=-${appDir}/.env
 ExecStart=${node} ${appDir}/packages/client/src/main.ts
 Restart=always
@@ -192,6 +213,8 @@ WantedBy=default.target
     "aigw-chrome.service": `[Unit]
 Description=AI Gateway dedicated Chrome (debug profile)
 After=graphical-session.target
+StartLimitIntervalSec=180
+StartLimitBurst=5
 
 [Service]
 Type=simple
@@ -231,6 +254,10 @@ function uninstallLinuxAutostart() {
   run("systemctl", ["--user", "daemon-reload"]);
 }
 
+function xmlEscape(s) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
 function macPlist(label, execPath) {
   const node = nodeBin();
   return `<?xml version="1.0" encoding="UTF-8"?>
@@ -243,6 +270,10 @@ function macPlist(label, execPath) {
     <string>-c</string>
     <string>set -a; [ -f "${appDir}/.env" ] &amp;&amp; . "${appDir}/.env"; set +a; exec ${node} ${execPath}</string>
   </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>${xmlEscape(runtimePath())}</string>
+  </dict>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
   <key>ThrottleInterval</key><integer>5</integer>
@@ -297,6 +328,7 @@ function windowsWrapper(entryRelPath) {
   const node = nodeBin();
   return `@echo off
 cd /d "%~dp0"
+set "PATH=${runtimePath()};%PATH%"
 :loop
 if exist "stop.flag" exit /b 0
 if exist ".env" for /f "usebackq tokens=1,* delims==" %%A in (".env") do set "%%A=%%B"
