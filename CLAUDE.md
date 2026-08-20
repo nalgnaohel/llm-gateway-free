@@ -148,6 +148,80 @@ Bump it deliberately when changing message shapes, and update
   E2E needs a Chromium reachable via `PLAYWRIGHT_BROWSERS_PATH`,
   `~/.cache/ms-playwright`, a system path, or `AIGW_TEST_CHROME`.
 
+## Deployment
+
+`.github/workflows/deploy.yml` runs on every push to `main`: `npm ci` +
+`npm run typecheck` + `npm test` gate a deploy job that pushes the repo to a
+single remote server over SSH (`SERVER_ACCOUNT`/`SERVER_IP`/`SERVER_PASS`
+secrets) and restarts it as a systemd service.
+
+- `scripts/deploy-push.sh` — runs on the CI runner (or locally with the same
+  env vars). Tars the repo (excluding `node_modules`, `.git`, `docs`, `tests`,
+  local DB files, `.env`), scp's it to `/opt/llm-gateway` on the server,
+  preserves the server's existing `.env` across the swap (copied from the
+  previous deploy, never overwritten by the tarball), and invokes
+  `deploy-server.sh` remotely. Supports `DRY_RUN=1` for a local no-SSH dry run.
+- `scripts/deploy-server.sh` — runs as root on the server. Idempotent:
+  installs Node 22+ if missing, `npm ci --omit=dev`, creates `.env` from
+  `.env.example` on first deploy only, writes/updates the `llm-gateway.service`
+  systemd unit (`ExecStart=node packages/server/src/main.ts`), restarts it, and
+  polls `/health` for up to 30s before failing the deploy. Supports `--check`
+  to validate prerequisites and print the would-be unit file without touching
+  the system — useful for testing changes to the script itself.
+
+The server-side pipeline above only ever pushes `packages/server` to a
+company-owned box. The client agent has a separate, parallel rollout story —
+see the next section — because it runs on *employees'* own machines, next to
+*their* browser/CLIs, not on infrastructure the company controls the same way.
+
+## Client Agent Rollout
+
+For an internal, company-wide pool of client agents (many employees each
+contributing a browser session and/or CLI logins to the shared gateway),
+`scripts/install-agent.sh` (macOS/Linux) / `scripts/install-agent.ps1`
+(Windows) bootstrap Node 22+ if needed and hand off to
+`scripts/install-agent.mjs`, which is consent-gated and idempotent:
+
+- Prints a consent notice and requires explicit acceptance **before ever
+  opening Chrome** — the notice explains the dedicated, isolated Chrome
+  profile (never the employee's personal one) and that whatever they log
+  into there becomes usable by the shared gateway pool.
+- Auto-installs `claude`/`opencode` CLIs if missing
+  (`scripts/install-clis.mjs`, reusing `BUILTIN_ADAPTERS` from
+  `packages/client/src/cli/adapters.ts` as the source of truth for bin names
+  — never hardcode them a second time).
+- Registers the client agent and the dedicated Chrome-debug process as
+  OS-native autostart entries (systemd `--user` on Linux, a `LaunchAgent` on
+  macOS, a Scheduled Task on Windows) so an employee never has to reopen
+  either process by hand.
+- `--check` previews every action with no writes (mirrors
+  `deploy-server.sh --check`); `--uninstall` removes only the autostart
+  entries, never the Chrome profile/agent-id/`.env`, unless `--purge-data` is
+  also passed.
+
+No new "call a provider API directly with a key" backend exists or is
+needed: `cli/opencode` already reaches 40+ providers (including free tiers)
+once an employee runs `opencode auth login <provider>` once — the CLI
+backend already covers it.
+
+**Known, deliberately deferred limitation:** every agent still authenticates
+with one shared `AIGW_AGENT_TOKEN` (`packages/server/src/hub/hub.ts:87-92`
+does a flat string compare against one process-wide value; the `clients`
+table has no per-client secret column at all). One leaked employee token
+cannot be revoked without rotating it for every other agent too. Per-agent
+tokens would require a schema + protocol change (checking the token against
+`agentId` inside the `register` handler rather than at HTTP-upgrade time,
+since `agentId` isn't known yet at upgrade) and are intentionally out of
+scope here — full detail in `docs/CLIENT_ROLLOUT.md`.
+
+**Never build a "quota exhausted -> auto-create a new key/account" fallback.**
+This was explicitly considered and rejected: it's sybil-account behavior
+against a provider's free-tier rate limiting, not a routing feature. The
+existing router/failover (`packages/server/src/http/chat.ts:167`) already
+spreads load across whichever real, employee-authenticated clients are
+connected — that's the entire scaling mechanism, and it only grows by
+consenting employees adding real logins, never by fabricating new ones.
+
 ## Security notes
 
 - The agent WebSocket requires `AIGW_AGENT_TOKEN` — change it from the default

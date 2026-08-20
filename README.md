@@ -56,11 +56,16 @@ tests/
   integration/  server + scripted fake clients over the real WebSocket
   e2e/          real Chromium, real page, real CLIs, official OpenAI SDK
 scripts/
-  run.sh            start/status/logs/stop for gateway + agent
-  smoke-test.sh     exercise the whole API against a running gateway
-  dev.sh            run gateway + agent in the foreground
-  chrome-debug.sh   launch Chrome with a debug port on a dedicated profile
-  postinstall.mjs   restore the executable bit on the shell scripts
+  run.sh              start/status/logs/stop for gateway + agent
+  smoke-test.sh       exercise the whole API against a running gateway
+  dev.sh              run gateway + agent in the foreground
+  chrome-debug.sh     launch Chrome with a debug port on a dedicated profile (POSIX)
+  chrome-debug.mjs    same, cross-platform (Linux/macOS/Windows)
+  install-agent.sh    employee installer bootstrap (macOS/Linux) — see docs/CLIENT_ROLLOUT.md
+  install-agent.ps1   employee installer bootstrap (Windows)
+  install-agent.mjs   installer logic: consent, CLI install, autostart
+  install-clis.mjs    auto-install claude/opencode CLIs if missing
+  postinstall.mjs     restore the executable bit on the shell scripts
 ```
 
 Runs on **Node 22** with native TypeScript type-stripping — there is no build step.
@@ -88,6 +93,12 @@ npm scripts above work regardless, and `npm install` restores the bit via
 To use the **browser** backends, start Chrome with a debug port first and sign in
 there once — `npm run chrome`. Web providers appear in `/v1/models` within one
 capability-scan interval of a tab being open and logged in.
+
+Rolling a client agent out to other people's machines instead of developing on
+this repo? See [`docs/CLIENT_ROLLOUT.md`](./docs/CLIENT_ROLLOUT.md) for a
+consent-gated, cross-platform installer (`scripts/install-agent.sh` /
+`.ps1`) that auto-installs the CLIs and keeps everything running across
+reboots.
 
 Point the smoke test at a specific model or host:
 
