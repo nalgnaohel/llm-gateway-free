@@ -16,19 +16,35 @@ choose to use for this.
 
 ```bash
 # macOS / Linux
-AIGW_REPO_URL=<internal git remote for this repo> ./scripts/install-agent.sh
+AIGW_REPO_URL=<internal git remote for this repo> \
+AIGW_AGENT_TOKEN=<the gateway's shared AIGW_AGENT_TOKEN> \
+./scripts/install-agent.sh
 
 # Windows (PowerShell)
 $env:AIGW_REPO_URL = "<internal git remote for this repo>"
+$env:AIGW_AGENT_TOKEN = "<the gateway's shared AIGW_AGENT_TOKEN>"
 .\scripts\install-agent.ps1
 ```
 
 `AIGW_REPO_URL` must point at wherever this repo is actually hosted
-internally (this doc deliberately doesn't hardcode a URL). Preview everything
-the installer would do without changing anything on the machine:
+internally (this doc deliberately doesn't hardcode a URL). `AIGW_AGENT_TOKEN`
+must match the target gateway's `AIGW_AGENT_TOKEN` — the installer writes it
+into `~/.ai-gateway-client/app/.env` (mode `0600`) so every autostart entry
+picks it up, on this run and every reboot after. It only needs to be passed
+once per machine: a rerun with no `AIGW_AGENT_TOKEN` set reuses whatever is
+already saved in that `.env`, and a rerun *with* a new value (e.g. rotating
+a leaked token) overwrites it and restarts the running units so the change
+takes effect immediately. `config.ts`'s built-in default server URL already
+points at the shared gateway; only pass `AIGW_SERVER_URL` too if routing this
+machine somewhere else. Missing the token entirely (no env var, no prior
+`.env`) is a hard error — it never silently falls back to the source's dev
+default and registers as an agent the real gateway will just reject.
+
+Preview everything the installer would do without changing anything on the
+machine:
 
 ```bash
-AIGW_REPO_URL=<...> ./scripts/install-agent.sh --check
+AIGW_REPO_URL=<...> AIGW_AGENT_TOKEN=<...> ./scripts/install-agent.sh --check
 ```
 
 ## What it does, in order
@@ -37,7 +53,9 @@ AIGW_REPO_URL=<...> ./scripts/install-agent.sh --check
    user usually isn't root: `brew`/`nvm` on macOS/Linux, `winget`/nvm-windows
    on Windows.
 2. Clones (first run) or `pull --ff-only`s (rerun) this repo into
-   `~/.ai-gateway-client/app`, then `npm ci --omit=dev`.
+   `~/.ai-gateway-client/app`, then persists `AIGW_AGENT_TOKEN` (and
+   `AIGW_SERVER_URL` if given) into that directory's `.env`, then
+   `npm ci --omit=dev`.
 3. Auto-installs `claude`/`opencode` CLIs if not already on `PATH`
    (`scripts/install-clis.mjs`), via `npm install -g @anthropic-ai/claude-code`
    / `npm install -g opencode-ai`. If a CLI install fails (commonly an npm
@@ -149,11 +167,14 @@ without any re-authentication.
   against a single process-wide value; the `clients` table
   (`packages/server/src/db/schema.ts`) has no per-client secret column.
   Leaking one employee's installed token can't be revoked without rotating
-  it for every other agent. Per-agent tokens are a deliberately separate,
-  future change — it needs a schema addition and a protocol change (the
-  token would have to be checked against `agentId` inside the `register`
-  message handler instead of at HTTP-upgrade time, since `agentId` isn't
-  known yet at upgrade).
+  it for every other agent — rotating means re-running the installer on
+  every machine with the new `AIGW_AGENT_TOKEN` (it overwrites the saved
+  `.env` value and restarts the running units), which is still an
+  every-machine operation, just no longer a manual SSH-and-edit-`.env` one.
+  Per-agent tokens are a deliberately separate, future change — it needs a
+  schema addition and a protocol change (the token would have to be checked
+  against `agentId` inside the `register` message handler instead of at
+  HTTP-upgrade time, since `agentId` isn't known yet at upgrade).
 - **No auto-provisioned API keys, and this is intentional.** If an employee
   wants a free-tier model beyond what a CLI login already gives them, they
   run `opencode auth login <provider>` themselves, once, with their own real
