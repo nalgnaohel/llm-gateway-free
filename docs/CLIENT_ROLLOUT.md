@@ -129,6 +129,13 @@ npm run uninstall:agent -- --purge-data   # also wipe chrome-profile/, agent-id,
 the persisted `agent-id`, or `.env` — rerunning the installer afterward
 reuses the same logged-in profile, no re-login needed.
 
+Verified on a real Linux install: `--uninstall` removed both systemd `--user`
+units while leaving `agent-id`, `.consent-v1-accepted` and `chrome-profile/`
+byte-for-byte unchanged; re-running the installer afterward printed
+`Chrome profile already exists - skipping first-login step.` and came back
+up with the same previously-logged-in capabilities (`web/*`, `cli/*`)
+without any re-authentication.
+
 ## Known limitations
 
 - **Headless Linux machines only ever get `cli/*` capabilities** — the
