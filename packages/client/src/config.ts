@@ -32,7 +32,7 @@ function resolveAgentId(dataDir: string, explicit?: string): string {
 export function loadClientConfig(env: NodeJS.ProcessEnv = process.env) {
   const dataDir = env.AIGW_CLIENT_DATA_DIR ?? path.join(os.homedir(), ".ai-gateway-client");
   return {
-    serverUrl: env.AIGW_SERVER_URL ?? "ws://127.0.0.1:8787/agent",
+    serverUrl: env.AIGW_SERVER_URL ?? "ws://47.236.100.116:8787/agent",
     agentToken: env.AIGW_AGENT_TOKEN ?? "dev-agent-token",
     agentId: resolveAgentId(dataDir, env.AIGW_AGENT_ID),
     name: env.AIGW_AGENT_NAME ?? os.hostname(),
