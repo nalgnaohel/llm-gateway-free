@@ -152,8 +152,10 @@ Bump it deliberately when changing message shapes, and update
 
 `.github/workflows/deploy.yml` runs on every push to `main`: `npm ci` +
 `npm run typecheck` + `npm test` gate a deploy job that pushes the repo to a
-single remote server over SSH (`SERVER_ACCOUNT`/`SERVER_IP`/`SERVER_PASS`
-secrets) and restarts it as a systemd service.
+single remote server over SSH (key-based — `SERVER_ACCOUNT`/`SERVER_IP`
+secrets plus a dedicated deploy keypair's private key in `SERVER_SSH_KEY`
+and the server's pinned host key in `SERVER_HOST_KEY`, never a password) and
+restarts it as a systemd service.
 
 - `scripts/deploy-push.sh` — runs on the CI runner (or locally with the same
   env vars). Tars the repo (excluding `node_modules`, `.git`, `docs`, `tests`,

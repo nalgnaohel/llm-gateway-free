@@ -2,12 +2,18 @@
 # Push the gateway source to the server and run the server-side deploy.
 # Runs from the repo root (GitHub Actions runner or locally).
 #
-#   SERVER_ACCOUNT=root SERVER_IP=x.y.z.w SERVER_PASS=... ./scripts/deploy-push.sh
+#   SERVER_ACCOUNT=root SERVER_IP=x.y.z.w SERVER_SSH_KEY="$(cat deploy_key)" \
+#     SERVER_HOST_KEY="ssh-ed25519 AAAA..." ./scripts/deploy-push.sh
+#
+# SERVER_SSH_KEY is the deploy keypair's private key (see docs/DEPLOY_KEY.md
+# for how it was provisioned); SERVER_HOST_KEY pins the server's host key
+# (the "keytype base64key" fields from `ssh-keyscan -t ed25519 <ip>`, no
+# hostname) so a compromised DNS/network path can't MITM the deploy - it is
+# NOT a secret, but it must be exact or the deploy will refuse to connect.
 set -eu
 
 ACCOUNT="${SERVER_ACCOUNT:?SERVER_ACCOUNT is required}"
 IP="${SERVER_IP:?SERVER_IP is required}"
-PASS="${SERVER_PASS:?SERVER_PASS is required}"
 HOST="${ACCOUNT}@${IP}"
 APP_DIR="/opt/llm-gateway"
 TARBALL="/tmp/llm-gateway-src.tar.gz"
@@ -25,10 +31,18 @@ if [ "$DRY_RUN" = 1 ]; then
   SSH="ssh"
   SCP="scp"
 else
-  command -v sshpass >/dev/null 2>&1 || { echo "sshpass not installed" >&2; exit 1; }
-  export SSHPASS="$PASS"
-  SSH="sshpass -e ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=20"
-  SCP="sshpass -e scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=20"
+  SSH_KEY="${SERVER_SSH_KEY:?SERVER_SSH_KEY is required (deploy keypair private key)}"
+  HOST_KEY="${SERVER_HOST_KEY:?SERVER_HOST_KEY is required (pinned server host key - run: ssh-keyscan -t ed25519 <ip>)}"
+
+  KEY_FILE="$(mktemp)"
+  KNOWN_HOSTS_FILE="$(mktemp)"
+  trap 'rm -f "$KEY_FILE" "$KNOWN_HOSTS_FILE"' EXIT
+  printf '%s\n' "$SSH_KEY" >"$KEY_FILE"
+  chmod 600 "$KEY_FILE"
+  printf '%s %s\n' "$IP" "$HOST_KEY" >"$KNOWN_HOSTS_FILE"
+
+  SSH="ssh -i $KEY_FILE -o UserKnownHostsFile=$KNOWN_HOSTS_FILE -o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=20"
+  SCP="scp -i $KEY_FILE -o UserKnownHostsFile=$KNOWN_HOSTS_FILE -o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=20"
 fi
 
 tar czf "$TARBALL" \

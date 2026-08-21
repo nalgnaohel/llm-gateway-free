@@ -24,28 +24,31 @@ jobs:
     if: github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
-      - name: Install sshpass
-        run: sudo apt-get update && sudo apt-get install -y sshpass
       - name: Check secrets present
         env:
           SERVER_ACCOUNT: ${{ secrets.SERVER_ACCOUNT }}
           SERVER_IP: ${{ secrets.SERVER_IP }}
-          SERVER_PASS: ${{ secrets.SERVER_PASS }}
+          SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
+          SERVER_HOST_KEY: ${{ secrets.SERVER_HOST_KEY }}
         run: |
           [ -n "$SERVER_ACCOUNT" ] && echo "SERVER_ACCOUNT: set" || { echo "SERVER_ACCOUNT: MISSING"; exit 1; }
           [ -n "$SERVER_IP" ] && echo "SERVER_IP: set" || { echo "SERVER_IP: MISSING"; exit 1; }
-          [ -n "$SERVER_PASS" ] && echo "SERVER_PASS: set" || { echo "SERVER_PASS: MISSING"; exit 1; }
+          [ -n "$SERVER_SSH_KEY" ] && echo "SERVER_SSH_KEY: set" || { echo "SERVER_SSH_KEY: MISSING"; exit 1; }
+          [ -n "$SERVER_HOST_KEY" ] && echo "SERVER_HOST_KEY: set" || { echo "SERVER_HOST_KEY: MISSING"; exit 1; }
       - name: Test SSH connectivity
         env:
           SERVER_ACCOUNT: ${{ secrets.SERVER_ACCOUNT }}
           SERVER_IP: ${{ secrets.SERVER_IP }}
-          SERVER_PASS: ${{ secrets.SERVER_PASS }}
+          SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
+          SERVER_HOST_KEY: ${{ secrets.SERVER_HOST_KEY }}
         run: |
-          export SSHPASS="$SERVER_PASS"
-          sshpass -e ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=15 "$SERVER_ACCOUNT@$SERVER_IP" 'echo SSH-OK; hostname'
+          KEY_FILE=$(mktemp); printf '%s\n' "$SERVER_SSH_KEY" >"$KEY_FILE"; chmod 600 "$KEY_FILE"
+          KNOWN_HOSTS_FILE=$(mktemp); printf '%s %s\n' "$SERVER_IP" "$SERVER_HOST_KEY" >"$KNOWN_HOSTS_FILE"
+          ssh -i "$KEY_FILE" -o UserKnownHostsFile="$KNOWN_HOSTS_FILE" -o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=15 "$SERVER_ACCOUNT@$SERVER_IP" 'echo SSH-OK; hostname'
       - name: Deploy gateway to server
         env:
           SERVER_ACCOUNT: ${{ secrets.SERVER_ACCOUNT }}
           SERVER_IP: ${{ secrets.SERVER_IP }}
-          SERVER_PASS: ${{ secrets.SERVER_PASS }}
+          SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
+          SERVER_HOST_KEY: ${{ secrets.SERVER_HOST_KEY }}
         run: sh ./scripts/deploy-push.sh
