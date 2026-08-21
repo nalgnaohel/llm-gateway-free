@@ -43,7 +43,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
     /** Model-list cache, keeps /v1/models cheap under polling clients. */
     modelsCacheTtlMs: num(env.AIGW_MODELS_CACHE_TTL_MS, 3_000),
 
-    routingStrategy: (env.AIGW_ROUTING_STRATEGY ?? "least-busy") as "least-busy" | "round-robin" | "fill-first",
+    routingStrategy: (env.AIGW_ROUTING_STRATEGY ?? "least-busy") as
+      | "least-busy"
+      | "round-robin"
+      | "fill-first"
+      | "ip-hash",
     logLevel: env.AIGW_LOG_LEVEL ?? "info",
   };
 }

@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AI Gateway · Dashboard</title>
+<link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+<div class="app">
+
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <div class="logo">AI</div>
+      <div>
+        <div class="title">AI Gateway</div>
+        <div class="subtitle">Vận hành &amp; giám sát</div>
+      </div>
+    </div>
+
+    <nav class="nav" id="nav">
+      <div class="nav-item active" data-view="overview">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+        <span>Tổng quan</span>
+      </div>
+      <div class="nav-item" data-view="playground">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        <span>Thử prompt</span>
+      </div>
+      <div class="nav-item" data-view="clients">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 20v-1.5a3.5 3.5 0 0 0-3.5-3.5h-5A3.5 3.5 0 0 0 5 18.5V20"/><circle cx="9.5" cy="8" r="3.2"/><path d="M15.5 8.6a2.8 2.8 0 1 0 0-5.4"/><path d="M19.5 20v-1.4a3 3 0 0 0-2.1-2.9"/></svg>
+        <span>Clients</span>
+        <span class="badge" id="nav-clients-count">0</span>
+      </div>
+      <div class="nav-item" data-view="capabilities">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/></svg>
+        <span>Web &amp; CLI</span>
+      </div>
+      <div class="nav-item" data-view="usage">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10"/><path d="M12 20V4"/><path d="M20 20v-7"/><path d="M2 20h20"/></svg>
+        <span>Token sử dụng</span>
+      </div>
+      <div class="nav-item" data-view="requests">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></svg>
+        <span>Requests</span>
+      </div>
+      <div class="nav-item" data-view="routing">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h4l4 12h4"/><path d="M4 18h4l2-6"/><path d="M16 6h4"/><path d="M18 4l2 2-2 2"/><path d="M18 16l2 2-2 2"/></svg>
+        <span>Routing</span>
+      </div>
+      <div class="nav-item" data-view="cache">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5.5" rx="8" ry="2.8"/><path d="M4 5.5v13c0 1.5 3.6 2.8 8 2.8s8-1.3 8-2.8v-13"/><path d="M4 12c0 1.5 3.6 2.8 8 2.8s8-1.3 8-2.8"/></svg>
+        <span>Cache</span>
+      </div>
+    </nav>
+
+    <div class="sidebar-foot">
+      <span class="dot" id="conn-dot"></span>
+      <span id="conn-text">Đang kết nối…</span>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div>
+        <h1 id="page-title">Tổng quan</h1>
+        <div class="sub" id="page-sub">Trạng thái gateway theo thời gian thực</div>
+      </div>
+      <div class="topbar-actions">
+        <button class="icon-btn" id="refresh-btn" title="Làm mới">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.3"/><path d="M21 4v6h-6"/></svg>
+        </button>
+        <button class="icon-btn" id="theme-btn" title="Đổi giao diện sáng/tối">
+          <svg id="theme-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></svg>
+        </button>
+      </div>
+    </header>
+
+    <div class="content">
+
+      <!-- ---------------------------------------------------- Overview -->
+      <section class="view active" id="view-overview">
+        <div class="stat-grid">
+          <div class="stat-card"><div class="label">Client online</div><div class="value accent" id="stat-clients-online">–</div><div class="foot" id="stat-clients-total">–</div></div>
+          <div class="stat-card"><div class="label">Job đang chạy</div><div class="value" id="stat-active-jobs">–</div><div class="foot">tổng các client</div></div>
+          <div class="stat-card"><div class="label">Capability sẵn sàng</div><div class="value" id="stat-capabilities">–</div><div class="foot" id="stat-cap-breakdown">web · cli</div></div>
+          <div class="stat-card"><div class="label">Tổng token đã dùng</div><div class="value ok" id="stat-tokens">–</div><div class="foot" id="stat-requests-total">–</div></div>
+        </div>
+
+        <div class="two-col">
+          <div class="card">
+            <div class="card-head"><h3>Client đang kết nối</h3><span class="hint" id="clients-live-hint">—</span></div>
+            <div class="table-wrap"><table>
+              <thead><tr><th>Client</th><th>Nền tảng</th><th>IP</th><th class="num">Job</th><th>Capability</th></tr></thead>
+              <tbody id="tbl-overview-clients"><tr class="empty-row"><td colspan="5">Đang tải…</td></tr></tbody>
+            </table></div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><h3>Chiến lược routing hiện tại</h3></div>
+            <div class="card-body" id="overview-routing">Đang tải…</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- -------------------------------------------------- Playground -->
+      <section class="view" id="view-playground">
+        <div class="view-head"><h2>Thử prompt</h2><p>Gửi thử một prompt tới đích danh một client để kiểm tra nhanh, không qua thuật toán routing.</p></div>
+        <div class="two-col">
+          <div class="card">
+            <div class="card-body">
+              <div class="field">
+                <label>Client</label>
+                <select id="pg-client"><option value="">Đang tải…</option></select>
+              </div>
+              <div class="field">
+                <label>Capability (web / CLI)</label>
+                <select id="pg-capability"><option value="">—</option></select>
+              </div>
+              <div class="field" id="pg-submodel-field" style="display:none;">
+                <label>Sub-model</label>
+                <select id="pg-submodel"></select>
+              </div>
+              <div class="field">
+                <label>Prompt</label>
+                <textarea id="pg-prompt" placeholder="Nhập prompt để kiểm tra client này…"></textarea>
+              </div>
+              <div style="display:flex; align-items:center; gap:12px;">
+                <button class="btn primary" id="pg-run">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v18l15-9z"/></svg>
+                  Chạy thử
+                </button>
+                <span class="muted" id="pg-status"></span>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><h3>Kết quả</h3><span class="hint" id="pg-meta"></span></div>
+            <div class="card-body">
+              <pre id="pg-output" class="pg-output">Chưa có kết quả — chọn client, capability và nhập prompt rồi bấm Chạy thử.</pre>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ----------------------------------------------------- Clients -->
+      <section class="view" id="view-clients">
+        <div class="view-head"><h2>Clients</h2><p>Toàn bộ client từng kết nối — online, offline, capability và tải hiện tại.</p></div>
+        <div class="card">
+          <div class="table-wrap"><table>
+            <thead><tr><th>Client</th><th>Trạng thái</th><th>Nền tảng</th><th>IP</th><th class="num">Job</th><th class="num">Tổng job</th><th class="num">Lỗi</th><th>Web / CLI hỗ trợ</th><th>Kết nối lần cuối</th></tr></thead>
+            <tbody id="tbl-clients"><tr class="empty-row"><td colspan="9">Đang tải…</td></tr></tbody>
+          </table></div>
+        </div>
+      </section>
+
+      <!-- ------------------------------------------------ Capabilities -->
+      <section class="view" id="view-capabilities">
+        <div class="view-head"><h2>Web &amp; CLI khả dụng</h2><p>Danh sách công cụ (web hoặc coding CLI) mà các client đang phục vụ được, gộp theo capability.</p></div>
+        <div class="two-col">
+          <div class="card">
+            <div class="card-head"><h3>🌐 Web providers</h3></div>
+            <div class="table-wrap"><table>
+              <thead><tr><th>Provider</th><th class="num">Client phục vụ</th><th class="num">Slot trống</th><th>Sub-models</th></tr></thead>
+              <tbody id="tbl-cap-web"><tr class="empty-row"><td colspan="4">Đang tải…</td></tr></tbody>
+            </table></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><h3>⌨️ Coding CLI</h3></div>
+            <div class="table-wrap"><table>
+              <thead><tr><th>CLI</th><th class="num">Client phục vụ</th><th class="num">Slot trống</th><th>Sub-models</th></tr></thead>
+              <tbody id="tbl-cap-cli"><tr class="empty-row"><td colspan="4">Đang tải…</td></tr></tbody>
+            </table></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ------------------------------------------------------- Usage -->
+      <section class="view" id="view-usage">
+        <div class="view-head"><h2>Token sử dụng theo client</h2><p>Chọn một client để xem chi tiết số token đã tiêu thụ.</p></div>
+        <div class="card">
+          <div class="table-wrap"><table>
+            <thead><tr><th>Client</th><th>Trạng thái</th><th class="num">Requests</th><th class="num">OK</th><th class="num">Lỗi</th><th class="num">Prompt tok.</th><th class="num">Completion tok.</th><th class="num">Tổng token</th><th>Tỉ trọng</th><th class="num">Latency TB</th></tr></thead>
+            <tbody id="tbl-usage"><tr class="empty-row"><td colspan="10">Đang tải…</td></tr></tbody>
+          </table></div>
+        </div>
+      </section>
+
+      <!-- ---------------------------------------------------- Requests -->
+      <section class="view" id="view-requests">
+        <div class="view-head"><h2>Requests gần đây</h2><p>50 request gần nhất qua gateway.</p></div>
+        <div class="card">
+          <div class="table-wrap"><table>
+            <thead><tr><th>Thời gian</th><th>Model</th><th>Client</th><th>Trạng thái</th><th class="num">Attempts</th><th>Cache</th><th class="num">Token</th><th class="num">Latency</th></tr></thead>
+            <tbody id="tbl-requests"><tr class="empty-row"><td colspan="8">Đang tải…</td></tr></tbody>
+          </table></div>
+        </div>
+      </section>
+
+      <!-- ----------------------------------------------------- Routing -->
+      <section class="view" id="view-routing">
+        <div class="view-head"><h2>Cấu hình routing</h2><p>Chọn thuật toán gateway dùng để phân phối request tới các client.</p></div>
+        <div class="section-note">Thay đổi có hiệu lực ngay và được lưu lại, áp dụng cho cả khi gateway khởi động lại.</div>
+        <div class="card">
+          <div class="card-body">
+            <div class="strategy-grid" id="strategy-grid"></div>
+            <div style="margin-top:18px; display:flex; align-items:center; gap:10px;">
+              <button class="btn primary" id="apply-strategy">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+                Áp dụng
+              </button>
+              <span class="muted" id="strategy-current-label"></span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ------------------------------------------------------- Cache -->
+      <section class="view" id="view-cache">
+        <div class="view-head"><h2>Response cache</h2><p>Cache 2 tầng cho các câu trả lời trùng lặp.</p></div>
+        <div class="stat-grid">
+          <div class="stat-card"><div class="label">Entries (RAM / đĩa)</div><div class="value" id="cache-entries">–</div></div>
+          <div class="stat-card"><div class="label">Hit (RAM)</div><div class="value ok" id="cache-hits-mem">–</div></div>
+          <div class="stat-card"><div class="label">Hit (đĩa)</div><div class="value ok" id="cache-hits-disk">–</div></div>
+          <div class="stat-card"><div class="label">Miss</div><div class="value warn" id="cache-misses">–</div></div>
+        </div>
+        <div class="card"><div class="card-body">
+          <button class="btn danger" id="clear-cache-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+            Xoá toàn bộ cache
+          </button>
+        </div></div>
+      </section>
+
+    </div>
+  </main>
+</div>
+
+<div class="toast" id="toast"></div>
+<script src="./app.js"></script>
+</body>
+</html>

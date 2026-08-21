@@ -1,6 +1,18 @@
 import type { ConnectedClient } from "./types.ts";
 
-export type RoutingStrategy = "least-busy" | "round-robin" | "fill-first";
+export type RoutingStrategy = "least-busy" | "round-robin" | "fill-first" | "ip-hash";
+
+export const ROUTING_STRATEGIES: RoutingStrategy[] = ["least-busy", "round-robin", "fill-first", "ip-hash"];
+
+/** FNV-1a: fast, deterministic, good enough spread for sticky IP routing. */
+function hashString(s: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i += 1) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return h >>> 0;
+}
 
 export type Candidate = {
   client: ConnectedClient;
@@ -40,6 +52,8 @@ export function pickCandidate(
   strategy: RoutingStrategy,
   rrState: Map<string, number>,
   capabilityId: string,
+  /** Caller IP for "ip-hash": same IP keeps landing on the same client while it stays a candidate. */
+  hashKey?: string,
 ): Candidate | undefined {
   if (candidates.length === 0) return undefined;
   if (candidates.length === 1) return candidates[0];
@@ -49,6 +63,11 @@ export function pickCandidate(
   if (strategy === "fill-first") {
     // Saturate one client before touching the next: fewest free slots wins.
     return [...sorted].sort((a, b) => a.clientFreeSlots - b.clientFreeSlots)[0];
+  }
+
+  if (strategy === "ip-hash") {
+    const idx = hashString(hashKey || "unknown") % sorted.length;
+    return sorted[idx];
   }
 
   if (strategy === "round-robin") {

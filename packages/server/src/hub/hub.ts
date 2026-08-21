@@ -12,10 +12,11 @@ import {
   type ServerToClient,
 } from "@aigw/shared";
 import type { Db } from "../db/index.ts";
+import { getMeta, setMeta } from "../db/index.ts";
 import * as repos from "../db/repos.ts";
 import { logger } from "../log.ts";
 import type { ServerConfig } from "../config.ts";
-import { candidatesFor, pickCandidate, aggregateCapabilities, type RoutingStrategy } from "./router.ts";
+import { candidatesFor, pickCandidate, aggregateCapabilities, ROUTING_STRATEGIES, type RoutingStrategy } from "./router.ts";
 import { GatewayError, type ConnectedClient, type JobEvent, type JobSpec } from "./types.ts";
 
 const log = logger("hub");
@@ -46,11 +47,27 @@ export class AgentHub {
 
   private readonly db: Db;
   private readonly cfg: ServerConfig;
+  /** Overrides `cfg.routingStrategy` once set from the admin API; persisted so it survives restarts. */
+  private routingStrategy: RoutingStrategy;
   readonly events = new EventEmitter();
 
   constructor(db: Db, cfg: ServerConfig) {
     this.db = db;
     this.cfg = cfg;
+    const persisted = getMeta(db, "routingStrategy");
+    this.routingStrategy = (ROUTING_STRATEGIES as string[]).includes(persisted ?? "")
+      ? (persisted as RoutingStrategy)
+      : (cfg.routingStrategy as RoutingStrategy);
+  }
+
+  getRoutingStrategy(): RoutingStrategy {
+    return this.routingStrategy;
+  }
+
+  setRoutingStrategy(strategy: RoutingStrategy): void {
+    this.routingStrategy = strategy;
+    setMeta(this.db, "routingStrategy", strategy);
+    log.info(`routing strategy changed to ${strategy}`);
   }
 
   /* ------------------------------------------------------------- lifecycle */
@@ -344,9 +361,19 @@ export class AgentHub {
    * GatewayError(503) when nothing can serve it.
    */
   dispatch(spec: JobSpec, exclude: ReadonlySet<string> = new Set()): { jobId: string; clientId: string; emitter: EventEmitter } {
-    const candidates = candidatesFor(this.clients.values(), spec.capabilityId, exclude);
-    const picked = pickCandidate(candidates, this.cfg.routingStrategy as RoutingStrategy, this.rrState, spec.capabilityId);
+    let candidates = candidatesFor(this.clients.values(), spec.capabilityId, exclude);
+    if (spec.targetClientId) candidates = candidates.filter((c) => c.client.clientId === spec.targetClientId);
+    const picked = pickCandidate(candidates, this.routingStrategy, this.rrState, spec.capabilityId, spec.callerIp);
     if (!picked) {
+      if (spec.targetClientId) {
+        const target = this.clients.get(spec.targetClientId);
+        const reason = !target
+          ? `client "${spec.targetClientId}" is not connected`
+          : !target.capabilities.get(spec.capabilityId)?.available
+            ? `client "${spec.targetClientId}" does not currently serve "${spec.capabilityId}"`
+            : `client "${spec.targetClientId}" has no free slot for "${spec.capabilityId}"`;
+        throw new GatewayError(503, "target_client_unavailable", reason);
+      }
       const anyClient = [...this.clients.values()].some((c) => c.capabilities.get(spec.capabilityId)?.available);
       throw new GatewayError(
         503,

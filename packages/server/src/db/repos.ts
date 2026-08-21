@@ -67,6 +67,42 @@ export function listClients(db: Db): Array<Record<string, unknown>> {
   return db.prepare(`SELECT * FROM clients ORDER BY last_seen_at DESC`).all() as Array<Record<string, unknown>>;
 }
 
+const safeJsonArray = (raw: unknown): unknown[] => {
+  try {
+    const parsed = JSON.parse(String(raw ?? "[]"));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
+/** Clients with their capabilities embedded, oldest history included (so an
+ *  offline client still shows what web/CLI backends it used to serve). */
+export function listClientsWithCapabilities(db: Db): Array<Record<string, unknown>> {
+  const clients = db.prepare(`SELECT * FROM clients ORDER BY last_seen_at DESC`).all() as Array<Record<string, unknown>>;
+  const caps = db.prepare(`SELECT * FROM capabilities ORDER BY capability_id`).all() as CapabilityRow[];
+  const byClient = new Map<string, CapabilityRow[]>();
+  for (const c of caps) {
+    const arr = byClient.get(c.client_id) ?? [];
+    arr.push(c);
+    byClient.set(c.client_id, arr);
+  }
+  return clients.map((c) => ({
+    ...c,
+    tags: safeJsonArray(c.tags),
+    capabilities: (byClient.get(c.id as string) ?? []).map((cap) => ({
+      capabilityId: cap.capability_id,
+      kind: cap.kind,
+      provider: cap.provider,
+      displayName: cap.display_name,
+      available: !!cap.available,
+      reason: cap.reason,
+      concurrency: cap.concurrency,
+      models: safeJsonArray(cap.models),
+    })),
+  }));
+}
+
 /* ------------------------------------------------------------- capabilities */
 
 export function replaceCapabilities(db: Db, clientId: string, caps: Capability[]): void {
@@ -222,4 +258,25 @@ export function usageSummary(db: Db): Record<string, unknown> {
     .prepare(`SELECT model, COUNT(*) AS n, SUM(total_tokens) AS tokens FROM requests GROUP BY model ORDER BY n DESC`)
     .all();
   return { totals, byModel };
+}
+
+/** Token/request usage per client, including clients with zero requests. */
+export function usageByClient(db: Db): Array<Record<string, unknown>> {
+  return db
+    .prepare(
+      `SELECT cl.id AS client_id, cl.name, cl.status, cl.platform, cl.remote_addr,
+              COUNT(r.id) AS requests,
+              SUM(CASE WHEN r.status = 'ok' THEN 1 ELSE 0 END) AS ok,
+              SUM(CASE WHEN r.status = 'error' THEN 1 ELSE 0 END) AS errors,
+              COALESCE(SUM(r.prompt_tokens), 0) AS prompt_tokens,
+              COALESCE(SUM(r.completion_tokens), 0) AS completion_tokens,
+              COALESCE(SUM(r.total_tokens), 0) AS total_tokens,
+              AVG(r.latency_ms) AS avg_latency_ms,
+              MAX(r.created_at) AS last_request_at
+       FROM clients cl
+       LEFT JOIN requests r ON r.client_id = cl.id
+       GROUP BY cl.id
+       ORDER BY total_tokens DESC`,
+    )
+    .all() as Array<Record<string, unknown>>;
 }

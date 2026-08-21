@@ -1,3 +1,5 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import express, { type Express, type NextFunction, type Request, type Response } from "express";
 import { buildErrorBody } from "@aigw/shared";
 import type { Db } from "../db/index.ts";
@@ -5,8 +7,12 @@ import * as repos from "../db/repos.ts";
 import type { AgentHub } from "../hub/hub.ts";
 import type { ServerConfig } from "../config.ts";
 import { ResponseCache, TtlValue } from "../cache.ts";
+import { ROUTING_STRATEGIES, type RoutingStrategy } from "../hub/router.ts";
 import { handleChatCompletions } from "./chat.ts";
+import { handleTestPrompt } from "./testPrompt.ts";
 import { logger } from "../log.ts";
+
+const dashboardDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "public", "dashboard");
 
 const log = logger("http");
 
@@ -129,7 +135,7 @@ export function createApp(deps: AppDeps): Express {
         activeJobs: c.inflight.size,
         capabilities: [...c.capabilities.values()],
       })),
-      persisted: repos.listClients(deps.db),
+      persisted: repos.listClientsWithCapabilities(deps.db),
     });
   });
 
@@ -138,11 +144,39 @@ export function createApp(deps: AppDeps): Express {
     res.json({ requests: repos.recentRequests(deps.db, Number(req.query.limit ?? 50)) }),
   );
   app.get("/api/usage", (_req, res) => res.json(repos.usageSummary(deps.db)));
+  app.get("/api/usage/clients", (_req, res) => res.json({ clients: repos.usageByClient(deps.db) }));
   app.get("/api/cache", (_req, res) => res.json(deps.cache.stats()));
   app.delete("/api/cache", (_req, res) => {
     deps.db.prepare(`DELETE FROM response_cache`).run();
     res.json({ ok: true });
   });
+
+  app.get("/api/settings/routing", (_req, res) => {
+    res.json({ strategy: deps.hub.getRoutingStrategy(), options: ROUTING_STRATEGIES });
+  });
+
+  app.put("/api/settings/routing", (req, res) => {
+    const strategy = String((req.body as Record<string, unknown> | undefined)?.strategy ?? "");
+    if (!(ROUTING_STRATEGIES as string[]).includes(strategy)) {
+      res.status(400).json(buildErrorBody(400, `strategy must be one of: ${ROUTING_STRATEGIES.join(", ")}`));
+      return;
+    }
+    deps.hub.setRoutingStrategy(strategy as RoutingStrategy);
+    res.json({ strategy });
+  });
+
+  app.post("/api/test-prompt", (req, res) => {
+    handleTestPrompt({ db: deps.db, hub: deps.hub, cfg: deps.cfg }, req, res).catch((err) => {
+      log.error("unhandled test-prompt error", String(err?.stack ?? err));
+      if (!res.headersSent) res.status(500).json(buildErrorBody(500, "internal gateway error"));
+      else res.end();
+    });
+  });
+
+  /* --------------------------------------------------------- dashboard UI */
+
+  app.use("/dashboard", express.static(dashboardDir));
+  app.get("/", (_req, res) => res.redirect("/dashboard"));
 
   app.use((req, res) => {
     res.status(404).json(buildErrorBody(404, `no route for ${req.method} ${req.path}`));

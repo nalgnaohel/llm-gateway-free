@@ -29,6 +29,10 @@ export type JobSpec = {
   maxTokens?: number;
   stopSequences?: string[];
   timeoutMs: number;
+  /** Caller's IP, used as the hash key when the routing strategy is "ip-hash". */
+  callerIp?: string;
+  /** Force dispatch to this exact client, bypassing the routing strategy (dashboard prompt tester). */
+  targetClientId?: string;
 };
 
 export type JobEvent =

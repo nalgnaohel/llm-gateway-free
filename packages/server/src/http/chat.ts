@@ -80,6 +80,7 @@ async function runWithFailover(
     temperature?: number;
     maxTokens?: number;
     stop?: string[];
+    callerIp?: string;
   },
   onChunk?: (delta: string) => void,
   onFailover?: (attempt: number, reason: string) => void,
@@ -107,6 +108,7 @@ async function runWithFailover(
           maxTokens: spec.maxTokens,
           stopSequences: spec.stop,
           timeoutMs: deps.cfg.jobTimeoutMs,
+          callerIp: spec.callerIp,
         },
         excluded,
       );
@@ -190,6 +192,7 @@ export async function handleChatCompletions(deps: ChatDeps, req: Request, res: R
   const { capabilityId, subModel } = resolveModel(body.model);
   const stream = body.stream === true;
   const apiKey = (res.locals.apiKey as string | undefined) ?? null;
+  const callerIp = (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim() || req.socket.remoteAddress || "unknown";
   repos.createRequest(deps.db, { id: requestId, model: body.model, stream, apiKey });
 
   const stop = normalizeStop(body.stop);
@@ -265,7 +268,7 @@ export async function handleChatCompletions(deps: ChatDeps, req: Request, res: R
 
     const outcome = await runWithFailover(
       deps,
-      { requestId, capabilityId, subModel, messages: body.messages, stream: true, temperature: body.temperature, maxTokens: body.max_tokens, stop },
+      { requestId, capabilityId, subModel, messages: body.messages, stream: true, temperature: body.temperature, maxTokens: body.max_tokens, stop, callerIp },
       (delta) => {
         if (aborted) return;
         if (!sentRole) {
@@ -339,6 +342,7 @@ export async function handleChatCompletions(deps: ChatDeps, req: Request, res: R
     temperature: body.temperature,
     maxTokens: body.max_tokens,
     stop,
+    callerIp,
   });
 
   if (outcome.ok) {
