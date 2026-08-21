@@ -3,10 +3,11 @@
 // (Linux/macOS/Windows). Run via scripts/install-agent.sh (macOS/Linux) or
 // scripts/install-agent.ps1 (Windows), which only ensure Node 22+ first.
 //
-//   AIGW_REPO_URL=<internal git remote> node scripts/install-agent.mjs [--check|--uninstall [--purge-data]|--stop]
+//   AIGW_REPO_URL=<internal git remote> AIGW_AGENT_TOKEN=<shared gateway token> \
+//     node scripts/install-agent.mjs [--check|--uninstall [--purge-data]|--stop]
 //
 // See docs/CLIENT_ROLLOUT.md for the full walkthrough and known limitations.
-import { existsSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync, readFileSync, rmSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import readline from "node:readline/promises";
@@ -133,6 +134,62 @@ function getSource() {
   }
 }
 
+// The autostart units source `${appDir}/.env` (EnvironmentFile=-...), but
+// nothing ever created that file - an employee's first install would
+// silently fall back to config.ts's dev default AIGW_AGENT_TOKEN and never
+// register with the real gateway. Require the real token as an install-time
+// env var (never hardcoded in source, since this repo/installer is what
+// gets cloned onto every employee machine) and persist it here so it
+// survives past this one invocation and across reboots. Safe to re-run:
+// only touches the keys actually passed this time, everything else already
+// in .env (e.g. a hand-set AIGW_CLI_CWD) is preserved.
+function parseEnvFile(content) {
+  const map = new Map();
+  for (const line of content.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const eq = trimmed.indexOf("=");
+    if (eq === -1) continue;
+    map.set(trimmed.slice(0, eq), trimmed.slice(eq + 1));
+  }
+  return map;
+}
+
+function ensureEnvFile() {
+  const envPath = path.join(appDir, ".env");
+  const existing = existsSync(envPath) ? parseEnvFile(readFileSync(envPath, "utf8")) : new Map();
+
+  const updates = new Map();
+  if (process.env.AIGW_AGENT_TOKEN) updates.set("AIGW_AGENT_TOKEN", process.env.AIGW_AGENT_TOKEN);
+  if (process.env.AIGW_SERVER_URL) updates.set("AIGW_SERVER_URL", process.env.AIGW_SERVER_URL);
+
+  const hasToken = updates.has("AIGW_AGENT_TOKEN") || existing.has("AIGW_AGENT_TOKEN");
+  if (!hasToken) {
+    console.error(
+      `AIGW_AGENT_TOKEN is not set and ${envPath} has none saved yet - pass the shared\n` +
+        "gateway token and re-run, e.g.\n" +
+        "  AIGW_REPO_URL=<repo> AIGW_AGENT_TOKEN=<shared secret> ./scripts/install-agent.sh",
+    );
+    process.exit(1);
+  }
+
+  if (flags.check) {
+    console.log(
+      updates.size > 0
+        ? `[check] would write ${envPath}, setting: ${[...updates.keys()].join(", ")}`
+        : `[check] ${envPath} already has AIGW_AGENT_TOKEN - would leave it as-is`,
+    );
+    return;
+  }
+
+  if (updates.size === 0) return;
+
+  for (const [key, value] of updates) existing.set(key, value);
+  const body = [...existing.entries()].map(([key, value]) => `${key}=${value}`).join("\n") + "\n";
+  writeFileSync(envPath, body, { mode: 0o600 });
+  console.log(`Wrote ${[...updates.keys()].join(", ")} to ${envPath}`);
+}
+
 function npmCi() {
   if (flags.check) {
     console.log(`[check] would run: npm ci --omit=dev (cwd=${appDir})`);
@@ -235,13 +292,17 @@ function installLinuxAutostart() {
   if (flags.check) {
     console.log(`[check] would write units to ${unitDir}:`);
     for (const [name, content] of Object.entries(units)) console.log(`--- ${name} ---\n${content}`);
-    console.log("[check] would run: systemctl --user daemon-reload && systemctl --user enable --now aigw-client-agent aigw-chrome");
+    console.log("[check] would run: systemctl --user daemon-reload && systemctl --user enable aigw-client-agent aigw-chrome && systemctl --user restart aigw-client-agent aigw-chrome");
     return;
   }
   mkdirSync(unitDir, { recursive: true });
   for (const [name, content] of Object.entries(units)) writeFileSync(path.join(unitDir, name), content);
   run("systemctl", ["--user", "daemon-reload"]);
-  run("systemctl", ["--user", "enable", "--now", "aigw-client-agent", "aigw-chrome"]);
+  run("systemctl", ["--user", "enable", "aigw-client-agent", "aigw-chrome"]);
+  // restart, not enable --now: a re-run (e.g. rotating AIGW_AGENT_TOKEN) must
+  // make an already-running unit pick up the new .env, which "enable --now"
+  // alone won't do on a unit that's already active.
+  run("systemctl", ["--user", "restart", "aigw-client-agent", "aigw-chrome"]);
 }
 
 function uninstallLinuxAutostart() {
@@ -423,6 +484,7 @@ async function main() {
   }
 
   getSource();
+  ensureEnvFile();
   npmCi();
   await installClis();
   await ensureConsent();
